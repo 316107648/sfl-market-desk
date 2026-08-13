@@ -10,8 +10,6 @@ import { getItemDetails } from "../lib";
 import { DatabasePage } from "../components/Database";
 import { DashboardPage } from "../components/Dashboard";
 import { CraftsPage } from "../components/Crafts";
-import { MarketPage, MarketTicker } from "../components/Market";
-import { LeaguePage } from "../components/League";
 
 type HistoryPoint = { time: number; price: number };
 type History = Record<string, HistoryPoint[]>;
@@ -19,7 +17,6 @@ type Tab =
   | "dashboard"
   | "database"
   | "crafts"
-  | "league"
   | "farm"
   | "market"
   | "optimizer"
@@ -329,7 +326,6 @@ export default function Home() {
           <button className={tab === "season" ? "active" : ""} onClick={() => setTab("season")}>🏆 Temporada</button>
           <button className={tab === "advisor" ? "active" : ""} onClick={() => setTab("advisor")}>✦ AI Advisor</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>⚙ Configurações</button>
-          <button className={tab === "league" ? "active" : ""} onClick={() => setTab("league")}> 🏆 Market League</button>
           <button
   className={tab === "database" ? "active" : ""}
   onClick={() => setTab("database")}
@@ -367,7 +363,6 @@ export default function Home() {
               advisor: "AI Advisor",
               settings: "Configurações",
               coins: "Conversão de Coins",
-              league: "Market League",
             } as Record<Tab, string>)[tab]}</h1>
           </div>
           <div className="status-area">
@@ -376,14 +371,6 @@ export default function Home() {
           </div>
         </header>
 
-        <MarketTicker
-         prices={prices}
-         history={history}
-         onSelect={(name) => {
-         setSelected(name);
-         setTab("market");
-          }}
-        />
        {tab === "database" && <DatabasePage />}
 
         {tab === "dashboard" && (
@@ -393,24 +380,6 @@ export default function Home() {
         )}
 
         {tab === "crafts" && <CraftsPage />}
-
-        {tab === "market" && (
-         <MarketPage
-           prices={prices}
-           selected={selected}
-          selectedPrice={selectedPrice}
-          selectedSignal={selectedSignal}
-          search={search}
-          items={items}
-          history={history}
-          chartPoints={chartPoints}
-          updatedAt={updatedAt}
-          onSearchChange={setSearch}
-          onSelect={setSelected}
-          getMarketSignal={marketSignal}
-        />
-      )}
-      {tab === "league" && <LeaguePage prices={prices} />}
       </section>
     </main>
   );

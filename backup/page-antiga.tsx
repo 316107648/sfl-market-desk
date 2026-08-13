@@ -3,33 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import PriceChart from "../components/PriceChart";
 import { demoPrices, type MarketResponse, type PriceMap } from "../lib/market";
-import { coinItems, items as gameItems } from "../lib/gameData";
-import Link from "next/link";
-import { items } from "../lib/gameData";
-import { getItemDetails } from "../lib";
-import { DatabasePage } from "../components/Database";
-import { DashboardPage } from "../components/Dashboard";
-import { CraftsPage } from "../components/Crafts";
-import { MarketPage, MarketTicker } from "../components/Market";
-import { LeaguePage } from "../components/League";
 
 type HistoryPoint = { time: number; price: number };
 type History = Record<string, HistoryPoint[]>;
-type Tab =
-  | "dashboard"
-  | "database"
-  | "crafts"
-  | "league"
-  | "farm"
-  | "market"
-  | "optimizer"
-  | "deliveries"
-  | "expansion"
-  | "season"
-  | "advisor"
-  | "settings"
-  | "coins";
-
+type Tab = "market" | "craft" | "coins";
 type SignalKind = "buy" | "hold" | "sell";
 
 type MarketSignal = {
@@ -40,6 +17,13 @@ type MarketSignal = {
   position: number;
   reason: string;
 };
+
+const coinItems = [
+  { name: "Duskberry", coins: 1000 },
+  { name: "Apple", coins: 20 },
+  { name: "Radish", coins: 12 },
+  { name: "Wheat", coins: 18 },
+];
 
 const recipes = [
   {
@@ -161,43 +145,6 @@ function formatChange(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function calculateCoinRanking(
-  coinItems: { name: string; coins: number }[],
-  prices: PriceMap,
-  requiredCoins: number,
-) {
-  const safeCoins = Math.max(1, Math.floor(requiredCoins));
-
-  return coinItems
-    .filter(
-  (item) =>
-    prices[item.name] !== undefined &&
-    item.coins > 0
-)
-    .map((item) => {
-      const unitPrice = prices[item.name] || 0;
-      const quantity = Math.ceil(safeCoins / item.coins);
-      const totalCoins = quantity * item.coins;
-
-      return {
-        ...item,
-        unitPrice,
-        quantity,
-        totalCoins,
-        totalFlower: quantity * unitPrice,
-        flowerPerCoin: unitPrice / item.coins,
-        leftover: totalCoins - safeCoins,
-      };
-    })
-    .sort((a, b) => {
-      if (a.totalFlower !== b.totalFlower) {
-        return a.totalFlower - b.totalFlower;
-      }
-
-      return a.leftover - b.leftover;
-    });
-}
-
 export default function Home() {
   const [prices, setPrices] = useState<PriceMap>(demoPrices);
   const [selected, setSelected] = useState("Gold");
@@ -205,12 +152,8 @@ export default function Home() {
   const [status, setStatus] = useState<"loading" | "live" | "demo">("loading");
   const [updatedAt, setUpdatedAt] = useState("");
   const [history, setHistory] = useState<History>({});
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useState<Tab>("market");
   const [recipeName, setRecipeName] = useState(recipes[0].name);
-  const [targetCoins, setTargetCoins] = useState(1000);
-  const sunflower = getItemDetails("sunflower");
-
-    console.log("Teste:", sunflower);
 
   function saveHistory(nextPrices: PriceMap) {
     setHistory((current) => {
@@ -294,16 +237,18 @@ export default function Home() {
     value: point.price,
   }));
 
-  const coinRanking = calculateCoinRanking(coinItems, prices, targetCoins);
+  const coinRanking = coinItems
+    .filter((item) => prices[item.name])
+    .map((item) => ({ ...item, cost: prices[item.name] / item.coins }))
+    .sort((a, b) => a.cost - b.cost);
+
   const bestCoin = coinRanking[0];
   const recipe = recipes.find((item) => item.name === recipeName) || recipes[0];
   const materialCost = recipe.materials.reduce(
     (sum, material) => sum + (prices[material.name] || 0) * material.qty,
     0,
   );
-  const craftCoinRanking = calculateCoinRanking(coinItems, prices, recipe.coins);
-  const bestCraftCoin = craftCoinRanking[0];
-  const coinCost = bestCraftCoin?.totalFlower || 0;
+  const coinCost = bestCoin ? bestCoin.cost * recipe.coins : 0;
   const totalCraft = materialCost + coinCost;
 
   return (
@@ -318,57 +263,22 @@ export default function Home() {
         </div>
 
         <nav>
-          <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>▦ Dashboard</button>
-          <button className={tab === "farm" ? "active" : ""} onClick={() => setTab("farm")}>🌻 Minha Fazenda</button>
           <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>📈 Mercado</button>
-          <button className={tab === "optimizer" ? "active" : ""} onClick={() => setTab("optimizer")}>⚡ Optimizer</button>
-          <button className={tab === "crafts" ? "active" : ""} onClick={() => setTab("crafts")}>⚒️ Crafting</button>
-          <button className={tab === "coins" ? "active" : ""} onClick={() => setTab("coins")}>🪙 Coins / FLOWER</button>
-          <button className={tab === "deliveries" ? "active" : ""} onClick={() => setTab("deliveries")}>📦 Entregas</button>
-          <button className={tab === "expansion" ? "active" : ""} onClick={() => setTab("expansion")}>🗺️ Expansão</button>
-          <button className={tab === "season" ? "active" : ""} onClick={() => setTab("season")}>🏆 Temporada</button>
-          <button className={tab === "advisor" ? "active" : ""} onClick={() => setTab("advisor")}>✦ AI Advisor</button>
-          <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>⚙ Configurações</button>
-          <button className={tab === "league" ? "active" : ""} onClick={() => setTab("league")}> 🏆 Market League</button>
-          <button
-  className={tab === "database" ? "active" : ""}
-  onClick={() => setTab("database")}
->
-  📚 Banco de Itens
-</button>
-</nav>
+          <button className={tab === "craft" ? "active" : ""} onClick={() => setTab("craft")}>⚒️ Crafting</button>
+          <button className={tab === "coins" ? "active" : ""} onClick={() => setTab("coins")}>🪙 Coins</button>
+        </nav>
 
-<div className="sidebar-note">
-  <strong>
-    {status === "live"
-      ? "Mercado conectado"
-      : status === "loading"
-        ? "Conectando..."
-        : "Modo demonstração"}
-  </strong>
+        <div className="sidebar-note">
+          <strong>{status === "live" ? "Mercado conectado" : status === "loading" ? "Conectando..." : "Modo demonstração"}</strong>
+          <span>Atualização automática a cada 15 minutos.</span>
+        </div>
+      </aside>
 
-  <span>Atualização automática a cada 15 minutos.</span>
-</div>
-</aside>
-
-<section className="content">
+      <section className="content">
         <header className="topbar">
           <div>
             <p className="eyebrow">SUNFLOWER LAND ANALYTICS</p>
-            <h1>{({
-              dashboard: "Dashboard",
-              farm: "Minha Fazenda",
-              market: "Mercado",
-              optimizer: "Daily Optimizer",
-              crafts: "Banco de Crafts",
-              deliveries: "Planejador de entregas",
-              expansion: "Expansion Planner",
-              season: "Season Planner",
-              advisor: "AI Advisor",
-              settings: "Configurações",
-              coins: "Conversão de Coins",
-              league: "Market League",
-            } as Record<Tab, string>)[tab]}</h1>
+            <h1>{tab === "market" ? "Mercado" : tab === "craft" ? "Calculadora de crafting" : "Conversão de Coins"}</h1>
           </div>
           <div className="status-area">
             <span className={`status ${status}`}>{status === "live" ? "● Em tempo real" : status === "loading" ? "● Carregando" : "● Demo"}</span>
@@ -376,41 +286,129 @@ export default function Home() {
           </div>
         </header>
 
-        <MarketTicker
-         prices={prices}
-         history={history}
-         onSelect={(name) => {
-         setSelected(name);
-         setTab("market");
-          }}
-        />
-       {tab === "database" && <DatabasePage />}
+        {tab === "market" && (
+          <>
+            <div className="metrics">
+              <div className="metric"><span>Artigos</span><strong>{Object.keys(prices).length}</strong></div>
+              <div className="metric"><span>Ativo selecionado</span><strong>{selected}</strong></div>
+              <div className="metric"><span>Preço atual</span><strong>{selectedPrice.toFixed(8)} FLOWER</strong></div>
+              <div className="metric">
+                <span>Variação registrada</span>
+                <strong className={selectedSignal.change > 0 ? "positive" : selectedSignal.change < 0 ? "negative" : "neutral"}>
+                  {selectedSignal.change > 0 ? "▲ " : selectedSignal.change < 0 ? "▼ " : "— "}{formatChange(selectedSignal.change)}
+                </strong>
+              </div>
+            </div>
 
-        {tab === "dashboard" && (
-          <DashboardPage
-            onNavigate={(nextTab) => setTab(nextTab as Tab)}
-          />
+            <div className="market-grid">
+              <section className="panel list-panel">
+                <label>
+                  Buscar produto
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Gold, Wood, Stone..." />
+                </label>
+
+                <div className="item-list">
+                  {items.slice(0, 120).map(([name, price]) => {
+                    const signal = marketSignal(price, history[name] || []);
+                    return (
+                      <button key={name} className={selected === name ? "selected" : ""} onClick={() => setSelected(name)}>
+                        <div className="item-name">
+                          <span>{name}</span>
+                          <small className={signal.change > 0 ? "positive" : signal.change < 0 ? "negative" : "neutral"}>
+                            {signal.change > 0 ? "▲ " : signal.change < 0 ? "▼ " : ""}{formatChange(signal.change)}
+                          </small>
+                        </div>
+                        <div className="item-price">
+                          <strong>{price.toFixed(8)}</strong>
+                          <span className={`mini-signal ${signal.kind}`}>{signal.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="panel chart-panel">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">ATIVO SELECIONADO</p>
+                    <h2>{selected}</h2>
+                  </div>
+                  <div className="price-summary">
+                    <div className="big-price">{selectedPrice.toFixed(8)}<small> FLOWER</small></div>
+                    <span className={`change-badge ${selectedSignal.change > 0 ? "positive" : selectedSignal.change < 0 ? "negative" : "neutral"}`}>
+                      {selectedSignal.change > 0 ? "▲ " : selectedSignal.change < 0 ? "▼ " : "— "}{formatChange(selectedSignal.change)}
+                    </span>
+                  </div>
+                </div>
+
+                <PriceChart points={chartPoints} />
+
+                <div className="analysis-grid">
+                  <div className="signal-card"><span>Sinal atual</span><strong className={`signal-label ${selectedSignal.kind}`}>{selectedSignal.label}</strong></div>
+                  <div className="signal-card"><span>Confiança</span><strong>{selectedSignal.confidence}%</strong></div>
+                  <div className="signal-card"><span>Posição na faixa</span><strong>{selectedSignal.position.toFixed(0)}%</strong></div>
+                </div>
+
+                <div className="confidence-track"><div className={`confidence-fill ${selectedSignal.kind}`} style={{ width: `${selectedSignal.confidence}%` }} /></div>
+
+                <div className={`analysis-callout ${selectedSignal.kind}`}>
+                  <strong>Análise automática</strong>
+                  <p>{selectedSignal.reason}</p>
+                </div>
+
+                <p className="caption">
+                  Última atualização: {updatedAt ? new Date(updatedAt).toLocaleString() : "—"}. Os sinais usam apenas o histórico salvo neste navegador e não garantem resultados futuros.
+                </p>
+              </section>
+            </div>
+          </>
         )}
 
-        {tab === "crafts" && <CraftsPage />}
+        {tab === "craft" && (
+          <div className="two-col">
+            <section className="panel form-panel">
+              <label>
+                Receita
+                <select value={recipeName} onChange={(event) => setRecipeName(event.target.value)}>
+                  {recipes.map((item) => <option key={item.name}>{item.name}</option>)}
+                </select>
+              </label>
+              <div className="recipe-list">
+                {recipe.materials.map((material) => (
+                  <div key={material.name}><span>{material.qty} × {material.name}</span><strong>{((prices[material.name] || 0) * material.qty).toFixed(8)} FLOWER</strong></div>
+                ))}
+                <div><span>{recipe.coins} Coins</span><strong>{coinCost.toFixed(8)} FLOWER</strong></div>
+              </div>
+            </section>
 
-        {tab === "market" && (
-         <MarketPage
-           prices={prices}
-           selected={selected}
-          selectedPrice={selectedPrice}
-          selectedSignal={selectedSignal}
-          search={search}
-          items={items}
-          history={history}
-          chartPoints={chartPoints}
-          updatedAt={updatedAt}
-          onSearchChange={setSearch}
-          onSelect={setSelected}
-          getMarketSignal={marketSignal}
-        />
-      )}
-      {tab === "league" && <LeaguePage prices={prices} />}
+            <section className="panel result-panel">
+              <p className="eyebrow">CUSTO ESTIMADO</p>
+              <h2>{totalCraft.toFixed(8)} FLOWER</h2>
+              <p>Materiais: {materialCost.toFixed(8)} FLOWER</p>
+              <p>Coins: {coinCost.toFixed(8)} FLOWER</p>
+              <div className="callout">Conversão de Coins baseada em {bestCoin?.name || "a melhor opção disponível"}.</div>
+            </section>
+          </div>
+        )}
+
+        {tab === "coins" && (
+          <div className="two-col">
+            <section className="panel">
+              <p className="eyebrow">MELHOR OPÇÃO ATUAL</p>
+              <h2>{bestCoin?.name || "Sem dados"}</h2>
+              <div className="big-price">{bestCoin ? bestCoin.cost.toFixed(10) : "—"}<small> FLOWER/Coin</small></div>
+            </section>
+            <section className="panel">
+              <h2>Ranking</h2>
+              <div className="recipe-list">
+                {coinRanking.map((item, index) => (
+                  <div key={item.name}><span>#{index + 1} {item.name}</span><strong>{item.cost.toFixed(10)}</strong></div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     </main>
   );
