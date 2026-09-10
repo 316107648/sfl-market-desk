@@ -16,6 +16,7 @@ import { FarmPage } from "../components/Farm";
 import { OptimizerPage } from "../components/Optimizer";
 import { AlertsPage, TelegramAlertWatcher } from "../components/Alerts";
 import { SeasonPage } from "../components/Season";
+import { AuthGate } from "../components/Auth";
 
 type HistoryPoint = { time: number; price: number };
 type History = Record<string, HistoryPoint[]>;
@@ -203,7 +204,7 @@ function calculateCoinRanking(
     });
 }
 
-export default function Home() {
+function MarketApp() {
   const [prices, setPrices] = useState<PriceMap>(demoPrices);
   const [selected, setSelected] = useState("Gold");
   const [search, setSearch] = useState("");
@@ -438,5 +439,13 @@ export default function Home() {
       )}
       </section>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <AuthGate>
+      <MarketApp />
+    </AuthGate>
   );
 }
