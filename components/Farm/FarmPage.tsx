@@ -497,8 +497,7 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
                       <strong>{animal.affectionAt ? (animal.affectionAt <= clock ? "DISPONÍVEL" : formatCountdown(animal.affectionAt - clock)) : "Cooldown ainda não mapeado"}</strong>
                     </div>
                     {animal.level !== undefined ? <small className="farm-diagnostic">Nível detectado: {animal.level}</small> : null}
-                    {animal.buffFields?.length ? <small className="farm-diagnostic">Buff/feed API: {animal.buffFields.join(" · ")}</small> : null}
-                    {animal.diagnosticFields?.length ? <small className="farm-diagnostic">Campos de mimo: {animal.diagnosticFields.join(" · ")}</small> : null}
+                    <AnimalApiDiagnostic animal={animal} />
                   </div>
                 ))}
               </FarmVisualSection>
@@ -713,6 +712,77 @@ function FarmRoomButton({ active, icon, title, value, onClick }: { active: boole
       <strong>{title}</strong>
       <small>{value}</small>
     </button>
+  );
+}
+
+function AnimalApiDiagnostic({ animal }: { animal: FarmLiveSnapshot["animals"][number] }) {
+  const fields = animal.apiDiagnosticFields ?? [];
+
+  const find = (pattern: RegExp) => fields.find((entry) => pattern.test(entry.path));
+  const findMany = (pattern: RegExp, limit = 4) => fields.filter((entry) => pattern.test(entry.path)).slice(0, limit);
+
+  const facts = [
+    { label: "Nível", entry: find(/(^|\.)level$|animalLevel/i) },
+    { label: "XP / experiência", entry: find(/(^|\.)(xp|experience)$|experience|xp/i) },
+    { label: "Sono / acorda", entry: find(/sleep|wake|awakeAt|wakesAt/i) },
+    { label: "Comida favorita", entry: find(/favorite.*food|favourite.*food|preferred.*food/i) },
+    { label: "Alimentação", entry: find(/food|feed|fed|grain|hungry/i) },
+    { label: "Produção", entry: find(/egg|feather|wool|milk|yield|produce|reward/i) },
+    { label: "Buff / boost", entry: find(/buff|boost/i) },
+    { label: "Próxima ação", entry: find(/request|next.*ready|affection|love|pet/i) },
+  ].filter((fact) => fact.entry);
+
+  const production = findMany(/egg|feather|wool|milk|yield|produce|reward/i, 8);
+  const feeding = findMany(/food|feed|fed|grain|hungry/i, 8);
+  const buffs = findMany(/buff|boost/i, 8);
+
+  return (
+    <details className="animal-api-diagnostic">
+      <summary>🔎 Diagnóstico da API</summary>
+      <div className="animal-api-diagnostic-body">
+        <p>
+          Estes são os campos que a Community Farm API realmente enviou para este animal. Ainda não atribuímos significado a campos duvidosos: primeiro verificamos o dado bruto.
+        </p>
+
+        {facts.length > 0 ? (
+          <div className="animal-api-facts">
+            {facts.map((fact) => (
+              <div key={`${fact.label}-${fact.entry!.path}`}>
+                <span>{fact.label}</span>
+                <strong>{fact.entry!.value}</strong>
+                <small>{fact.entry!.path}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="animal-api-empty">Nenhum campo conhecido foi identificado automaticamente neste animal.</p>
+        )}
+
+        {(production.length || feeding.length || buffs.length) ? (
+          <div className="animal-api-groups">
+            {production.length ? <DiagnosticGroup title="🥚 Produção" fields={production} /> : null}
+            {feeding.length ? <DiagnosticGroup title="🌾 Alimentação" fields={feeding} /> : null}
+            {buffs.length ? <DiagnosticGroup title="⚡ Buffs" fields={buffs} /> : null}
+          </div>
+        ) : null}
+
+        <details className="animal-api-raw">
+          <summary>Ver JSON bruto deste animal</summary>
+          <pre>{JSON.stringify(animal.rawData ?? {}, null, 2)}</pre>
+        </details>
+      </div>
+    </details>
+  );
+}
+
+function DiagnosticGroup({ title, fields }: { title: string; fields: Array<{ path: string; value: string }> }) {
+  return (
+    <div>
+      <strong>{title}</strong>
+      {fields.map((field) => (
+        <span key={`${field.path}-${field.value}`}><code>{field.path}</code> = {field.value}</span>
+      ))}
+    </div>
   );
 }
 

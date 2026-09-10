@@ -63,6 +63,8 @@ export type FarmLiveAnimal = {
   affectionLabel?: string;
   diagnosticFields?: string[];
   buffFields?: string[];
+  apiDiagnosticFields?: Array<{ path: string; value: string }>;
+  rawData?: unknown;
   level?: number;
   note?: string;
 };

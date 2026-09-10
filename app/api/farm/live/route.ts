@@ -429,6 +429,36 @@ function parseProductions(buildingsValue: unknown, boosts: BoostContext): FarmLi
   return out.slice(0, 100);
 }
 
+function flattenAnimalDiagnostics(value: unknown, path = "", depth = 0, out: Array<{ path: string; value: string }> = []) {
+  if (depth > 6 || out.length >= 120 || value == null) return out;
+  if (["string", "number", "boolean"].includes(typeof value)) {
+    const p = path || "value";
+    if (/level|xp|experience|sleep|wake|ready|egg|feather|wool|milk|food|feed|grain|buff|boost|yield|produce|reward|request|affection|love|pet|mim|cycle|round|fed|hungry|state|status/i.test(p)) {
+      out.push({ path: p, value: String(value) });
+    }
+    return out;
+  }
+  if (Array.isArray(value)) {
+    value.slice(0, 25).forEach((child, index) => flattenAnimalDiagnostics(child, `${path}[${index}]`, depth + 1, out));
+    return out;
+  }
+  const record = asRecord(value);
+  for (const [key, child] of Object.entries(record)) {
+    const next = path ? `${path}.${key}` : key;
+    flattenAnimalDiagnostics(child, next, depth + 1, out);
+    if (out.length >= 120) break;
+  }
+  return out;
+}
+
+function inferAnimalKind(a: UnknownRecord, fallback: string) {
+  const candidates = [a.type, a.animalType, a.species, a.kind];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return fallback;
+}
+
 function parseAnimalCollection(value: unknown, kind: string): FarmLiveAnimal[] {
   return Object.entries(asRecord(value)).map(([id, animal]) => {
     const a = asRecord(animal);
@@ -455,6 +485,8 @@ function parseAnimalCollection(value: unknown, kind: string): FarmLiveAnimal[] {
       .map(([key, value]) => `${key}=${String(value)}`)
       .slice(0, 16);
     const level = asNumber(a.level) ?? asNumber(a.animalLevel);
+    const apiDiagnosticFields = flattenAnimalDiagnostics(a);
+    const resolvedKind = inferAnimalKind(a, kind);
     const explicitState = String(a.state ?? a.status ?? "").toLowerCase();
     let state: FarmLiveAnimal["state"] = "unknown";
     if (sickUntil && sickUntil > Date.now() || explicitState.includes("sick")) state = "sick";
@@ -462,11 +494,13 @@ function parseAnimalCollection(value: unknown, kind: string): FarmLiveAnimal[] {
     else if (explicitState.includes("hungry") || explicitState.includes("attention")) state = "needs_attention";
     else if (Object.keys(a).length) state = "awake";
     return {
-      id, kind, name: typeof a.name === "string" ? a.name : undefined, state,
+      id, kind: resolvedKind, name: typeof a.name === "string" ? a.name : undefined, state,
       readyAt: sickUntil ?? asleepUntil ?? readyAt,
       affectionAt, affectionLabel: affectionAt ? "Próximo mimo" : undefined,
       diagnosticFields: diagnosticFields.length ? diagnosticFields : undefined,
-      buffFields: buffFields.length ? buffFields : undefined, level,
+      buffFields: buffFields.length ? buffFields : undefined,
+      apiDiagnosticFields: apiDiagnosticFields.length ? apiDiagnosticFields : undefined,
+      rawData: a, level,
       note: explicitState || undefined,
     };
   });
