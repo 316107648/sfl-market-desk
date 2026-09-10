@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { loadCloudState, saveCloudState } from "../../lib/cloud/client";
 import AnimalBuffOptimizer from "./AnimalBuffOptimizer";
 import { crops } from "../../lib/gameData";
 import type { PriceMap } from "../../lib/market";
@@ -15,6 +16,7 @@ import {
   type FarmLiveSnapshot,
   collectibleBonusSummary,
   saveStoredFarmSnapshot,
+  loadStoredFarmSnapshot,
 } from "../../lib/farm";
 
 type FarmPageProps = {
@@ -37,9 +39,41 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
   const [publicSnapshot, setPublicSnapshot] = useState<FarmPublicSnapshot | null>(null);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState("");
+  const [cloudRestoreMessage, setCloudRestoreMessage] = useState("");
+  const [selectedChickenId, setSelectedChickenId] = useState<string | null>(null);
 
   useEffect(() => {
-    setProfile(loadFarmProfile());
+    const localProfile = loadFarmProfile();
+    const localSnapshot = loadStoredFarmSnapshot();
+    setProfile(localProfile);
+    if (localSnapshot?.farmId) {
+      setLiveSnapshot(localSnapshot);
+      setCloudRestoreMessage("Dados da Fazenda restaurados deste dispositivo.");
+    }
+
+    async function restoreFromCloud() {
+      try {
+        const cloudProfile = await loadCloudState<FarmProfile>("account", "farm_profile");
+        const restoredProfile = cloudProfile.data?.landId ? cloudProfile.data : localProfile;
+        if (cloudProfile.data?.landId) {
+          const saved = saveFarmProfile(cloudProfile.data);
+          setProfile(saved);
+        }
+
+        const farmId = restoredProfile.landId?.trim();
+        if (!farmId) return;
+
+        const cloudSnapshot = await loadCloudState<FarmLiveSnapshot>(farmId, "farm_latest_snapshot");
+        if (cloudSnapshot.data?.farmId) {
+          setLiveSnapshot(cloudSnapshot.data);
+          setCloudRestoreMessage("Dados da Fazenda restaurados da nuvem.");
+        }
+      } catch {
+        // O cache local continua funcionando se a nuvem estiver indisponível.
+      }
+    }
+
+    void restoreFromCloud();
     const timer = window.setInterval(() => setClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -95,7 +129,8 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
   function handleSave() {
     const saved = saveFarmProfile(profile);
     setProfile(saved);
-    setSavedMessage("Perfil salvo. Com o banco configurado, os dados operacionais também são sincronizados na nuvem.");
+    void saveCloudState("account", "farm_profile", saved);
+    setSavedMessage("Perfil salvo no dispositivo e sincronizado com sua conta na nuvem.");
   }
 
   async function handleLiveLookup() {
@@ -117,6 +152,10 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
       const snapshot = await loadLiveFarmData(profile.landId, apiKey);
       setLiveSnapshot(snapshot);
       saveStoredFarmSnapshot(snapshot);
+      const profileForCloud = saveFarmProfile({ ...profile, landId: snapshot.farmId });
+      setProfile(profileForCloud);
+      void saveCloudState("account", "farm_profile", profileForCloud);
+      setCloudRestoreMessage("Snapshot atual salvo na nuvem.");
 
       if (snapshot.summary.cropPlots > 0) {
         setProfile((current) => ({
@@ -176,6 +215,8 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
           <small>{liveSnapshot ? "Dados reais carregados" : "Sem conexão de carteira"}</small>
         </div>
       </section>
+
+      {cloudRestoreMessage ? <div className="farm-cloud-restored">☁️ {cloudRestoreMessage}</div> : null}
 
       <div className="farm-metrics">
         <div className="metric">
@@ -483,24 +524,26 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
 
             {farmRoom === "animals" && (
               <div className="farm-room-stack">
-              <AnimalBuffOptimizer animals={liveSnapshot.animals} prices={prices} farmId={liveSnapshot.farmId} />
-              <FarmVisualSection title="🐾 Casa dos Animais" empty="Nenhum animal foi retornado neste formato.">
-                {liveSnapshot.animals.map((animal) => (
-                  <div className="farm-animal-wrap" key={`${animal.kind}-${animal.id}`}>
-                    <FarmTile icon={animal.kind === "Chicken" ? "🐔" : "🐄"}
-                      title={animal.name || `${animal.kind} #${animal.id}`} subtitle={animalStateLabel(animal.state)}
-                      readyAt={animal.readyAt} now={clock} forceReady={animal.state === "awake"}
-                      readyLabel={animal.state === "sick" ? "PRECISA DE ATENÇÃO" : "ACORDADO"}
-                      warning={animal.state === "sick" || animal.state === "needs_attention"} />
-                    <div className={`farm-affection ${animal.affectionAt && animal.affectionAt <= clock ? "ready" : ""}`}>
-                      <span>🤗 Mimo</span>
-                      <strong>{animal.affectionAt ? (animal.affectionAt <= clock ? "DISPONÍVEL" : formatCountdown(animal.affectionAt - clock)) : "Cooldown ainda não mapeado"}</strong>
-                    </div>
-                    {animal.level !== undefined ? <small className="farm-diagnostic">Nível detectado: {animal.level}</small> : null}
-                    <AnimalApiDiagnostic animal={animal} />
-                  </div>
-                ))}
-              </FarmVisualSection>
+                <AnimalBuffOptimizer animals={liveSnapshot.animals} prices={prices} farmId={liveSnapshot.farmId} />
+                <ChickenCoop
+                  animals={liveSnapshot.animals}
+                  now={clock}
+                  selectedId={selectedChickenId}
+                  onSelect={setSelectedChickenId}
+                />
+                {liveSnapshot.animals.some((animal) => animal.kind !== "Chicken") ? (
+                  <FarmVisualSection title="🐾 Outros animais" empty="Nenhum outro animal foi retornado.">
+                    {liveSnapshot.animals.filter((animal) => animal.kind !== "Chicken").map((animal) => (
+                      <div className="farm-animal-wrap" key={`${animal.kind}-${animal.id}`}>
+                        <FarmTile icon="🐄" title={animal.name || `${animal.kind} #${animal.id}`} subtitle={animalStateLabel(animal.state)}
+                          readyAt={animal.readyAt} now={clock} forceReady={animal.state === "awake"}
+                          readyLabel={animal.state === "sick" ? "PRECISA DE ATENÇÃO" : "ACORDADO"}
+                          warning={animal.state === "sick" || animal.state === "needs_attention"} />
+                        <AnimalApiDiagnostic animal={animal} />
+                      </div>
+                    ))}
+                  </FarmVisualSection>
+                ) : null}
               </div>
             )}
 
@@ -713,6 +756,90 @@ function FarmRoomButton({ active, icon, title, value, onClick }: { active: boole
       <small>{value}</small>
     </button>
   );
+}
+
+
+function ChickenCoop({ animals, now, selectedId, onSelect }: {
+  animals: FarmLiveSnapshot["animals"];
+  now: number;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const chickens = animals.filter((animal) => animal.kind === "Chicken");
+  const selected = chickens.find((animal) => animal.id === selectedId) ?? chickens[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedId && chickens[0]) onSelect(chickens[0].id);
+  }, [selectedId, chickens.length]);
+
+  if (!chickens.length) {
+    return <div className="chicken-coop-empty">Nenhuma galinha foi retornada pela API neste snapshot.</div>;
+  }
+
+  const sleeping = chickens.filter((animal) => animal.state === "sleeping").length;
+  const attention = chickens.filter((animal) => animal.state === "sick" || animal.state === "needs_attention").length;
+
+  return (
+    <section className="chicken-coop-shell">
+      <div className="chicken-coop-topbar">
+        <div><span className="chicken-coop-mark">🐔</span><div><p className="eyebrow">GALINHEIRO</p><h3>{chickens.length} galinhas detectadas</h3></div></div>
+        <div className="chicken-coop-kpis"><span>😴 {sleeping} dormindo</span><span>❤️ {attention} atenção</span></div>
+      </div>
+
+      <div className="chicken-coop-layout">
+        <div className="chicken-coop-board">
+          <div className="coop-prop coop-hay">▦</div>
+          <div className="coop-prop coop-bucket">◉</div>
+          <div className="coop-chicken-grid">
+            {chickens.map((animal) => {
+              const isSelected = selected?.id === animal.id;
+              const sleepingNow = animal.state === "sleeping";
+              const progress = Math.max(12, Math.min(100, animal.level ? (animal.level / Math.max(15, animal.level)) * 100 : 35));
+              return (
+                <button key={animal.id} className={`coop-chicken ${isSelected ? "selected" : ""} ${animal.state}`} onClick={() => onSelect(animal.id)}>
+                  <span className="coop-status-icon">{sleepingNow ? "Zz" : animal.state === "sick" ? "!" : animal.state === "needs_attention" ? "♥" : ""}</span>
+                  <span className="coop-chicken-icon">🐔</span>
+                  <span className="coop-chicken-bottom"><b>{animal.level ?? "?"}</b><i><em style={{ width: `${progress}%` }} /></i></span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="coop-legend"><span>🐔 ativo</span><span>💤 dormindo</span><span>❤️ precisa de atenção</span></div>
+        </div>
+
+        {selected ? (
+          <aside className="chicken-detail-panel">
+            <div className="chicken-detail-title"><span>🐔</span><div><h3>{selected.name || `Chicken #${selected.id}`}</h3><p>Nível {selected.level ?? "não identificado"} · {animalStateLabel(selected.state)}</p></div></div>
+            <ChickenFact icon="⏱️" label="Estado / próximo ciclo" value={selected.readyAt ? (selected.readyAt <= now ? "Disponível agora" : formatCountdown(selected.readyAt - now)) : animalStateLabel(selected.state)} />
+            <ChickenDiagnosticSummary animal={selected} />
+            <div className="chicken-mimo-row"><span>🤗 Mimo</span><strong>{selected.affectionAt ? (selected.affectionAt <= now ? "DISPONÍVEL" : formatCountdown(selected.affectionAt - now)) : "API ainda não mapeada"}</strong></div>
+            <AnimalApiDiagnostic animal={selected} />
+          </aside>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ChickenFact({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return <div className="chicken-fact"><span>{icon}</span><div><small>{label}</small><strong>{value}</strong></div></div>;
+}
+
+function ChickenDiagnosticSummary({ animal }: { animal: FarmLiveSnapshot["animals"][number] }) {
+  const fields = animal.apiDiagnosticFields ?? [];
+  const first = (pattern: RegExp) => fields.find((entry) => pattern.test(entry.path));
+  const production = fields.filter((entry) => /egg|feather|yield|produce|reward/i.test(entry.path)).slice(0, 3);
+  const xp = first(/(^|\.)(xp|experience)$|experience|xp/i);
+  const food = first(/favorite.*food|favourite.*food|preferred.*food|food|feed|grain/i);
+  const buff = first(/buff|boost/i);
+
+  return <div className="chicken-summary-facts">
+    {production.length ? <div className="chicken-summary-row"><span>🥚 Produção</span><strong>{production.map((item) => item.value).join(" · ")}</strong></div> : null}
+    {xp ? <div className="chicken-summary-row"><span>⚡ XP</span><strong>{xp.value}</strong></div> : null}
+    {food ? <div className="chicken-summary-row"><span>🌾 Alimentação</span><strong>{food.value}</strong></div> : null}
+    {buff ? <div className="chicken-summary-row"><span>🎵 Buff</span><strong>{buff.value}</strong></div> : null}
+    {!production.length && !xp && !food && !buff ? <p className="chicken-summary-empty">Abra o diagnóstico abaixo para ver os campos que a API enviou.</p> : null}
+  </div>;
 }
 
 function AnimalApiDiagnostic({ animal }: { animal: FarmLiveSnapshot["animals"][number] }) {

@@ -1,31 +1,38 @@
-import { saveCloudFarmSnapshot } from "../cloud/client";
+import { saveCloudFarmSnapshot, saveCloudState } from "../cloud/client";
 import type { FarmLiveSnapshot } from "./liveData";
 
-const KEY = "sfl-market:last-farm-snapshot:v1";
+const KEY = "sfl-market:last-farm-snapshot:v2";
 
-export type StoredFarmSnapshot = Pick<
-  FarmLiveSnapshot,
-  "farmId" | "fetchedAt" | "inventory" | "boosts" | "collectibles" | "summary"
->;
+export type StoredFarmSnapshot = FarmLiveSnapshot;
+
+function compactForCloud(snapshot: FarmLiveSnapshot): FarmLiveSnapshot {
+  // Mantemos os dados necessários para restaurar toda a Fazenda no próximo login.
+  // A Farm API Key nunca faz parte do snapshot.
+  return {
+    ...snapshot,
+    animals: snapshot.animals.map((animal) => ({
+      ...animal,
+      // rawData pode ser grande. Os campos diagnosticados continuam salvos.
+      rawData: animal.rawData,
+    })),
+  };
+}
 
 export function saveStoredFarmSnapshot(snapshot: FarmLiveSnapshot) {
   if (typeof window === "undefined") return;
-  const compact: StoredFarmSnapshot = {
-    farmId: snapshot.farmId,
-    fetchedAt: snapshot.fetchedAt,
-    inventory: snapshot.inventory,
-    boosts: snapshot.boosts,
-    collectibles: snapshot.collectibles,
-    summary: snapshot.summary,
-  };
+  const stored = compactForCloud(snapshot);
+
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(compact));
+    window.localStorage.setItem(KEY, JSON.stringify(stored));
   } catch {
-    // Storage is a convenience only. Never break the farm page if it is unavailable.
+    // Cache local é apenas conveniência.
   }
 
-  // Cloud Data Vault: salva um snapshot histórico sem persistir a Farm API Key.
-  void saveCloudFarmSnapshot(compact, snapshot.farmId, snapshot.fetchedAt);
+  // Estado atual: sobrescreve e permite restaurar a Fazenda em outro dispositivo.
+  void saveCloudState(snapshot.farmId, "farm_latest_snapshot", stored);
+
+  // Histórico: registra pontos no tempo para análises futuras.
+  void saveCloudFarmSnapshot(stored, snapshot.farmId, snapshot.fetchedAt);
 }
 
 export function loadStoredFarmSnapshot(): StoredFarmSnapshot | null {
