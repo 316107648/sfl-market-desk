@@ -12,6 +12,10 @@ import { DashboardPage } from "../components/Dashboard";
 import { CraftsPage } from "../components/Crafts";
 import { MarketPage, MarketTicker } from "../components/Market";
 import { LeaguePage } from "../components/League";
+import { FarmPage } from "../components/Farm";
+import { OptimizerPage } from "../components/Optimizer";
+import { AlertsPage, TelegramAlertWatcher } from "../components/Alerts";
+import { SeasonPage } from "../components/Season";
 
 type HistoryPoint = { time: number; price: number };
 type History = Record<string, HistoryPoint[]>;
@@ -28,6 +32,7 @@ type Tab =
   | "season"
   | "advisor"
   | "settings"
+  | "alerts"
   | "coins";
 
 type SignalKind = "buy" | "hold" | "sell";
@@ -208,9 +213,6 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [recipeName, setRecipeName] = useState(recipes[0].name);
   const [targetCoins, setTargetCoins] = useState(1000);
-  const sunflower = getItemDetails("sunflower");
-
-    console.log("Teste:", sunflower);
 
   function saveHistory(nextPrices: PriceMap) {
     setHistory((current) => {
@@ -329,6 +331,7 @@ export default function Home() {
           <button className={tab === "season" ? "active" : ""} onClick={() => setTab("season")}>🏆 Temporada</button>
           <button className={tab === "advisor" ? "active" : ""} onClick={() => setTab("advisor")}>✦ AI Advisor</button>
           <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>⚙ Configurações</button>
+          <button className={tab === "alerts" ? "active" : ""} onClick={() => setTab("alerts")}>🔔 Alertas</button>
           <button className={tab === "league" ? "active" : ""} onClick={() => setTab("league")}> 🏆 Market League</button>
           <button
   className={tab === "database" ? "active" : ""}
@@ -357,6 +360,7 @@ export default function Home() {
             <p className="eyebrow">SUNFLOWER LAND ANALYTICS</p>
             <h1>{({
               dashboard: "Dashboard",
+              database: "Banco de Itens",
               farm: "Minha Fazenda",
               market: "Mercado",
               optimizer: "Daily Optimizer",
@@ -366,6 +370,7 @@ export default function Home() {
               season: "Season Planner",
               advisor: "AI Advisor",
               settings: "Configurações",
+              alerts: "Alertas",
               coins: "Conversão de Coins",
               league: "Market League",
             } as Record<Tab, string>)[tab]}</h1>
@@ -375,6 +380,8 @@ export default function Home() {
             <button onClick={() => void loadPrices()}>Atualizar</button>
           </div>
         </header>
+
+        <TelegramAlertWatcher prices={prices} />
 
         <MarketTicker
          prices={prices}
@@ -392,7 +399,7 @@ export default function Home() {
           />
         )}
 
-        {tab === "crafts" && <CraftsPage />}
+        {tab === "crafts" && <CraftsPage prices={prices} />}
 
         {tab === "market" && (
          <MarketPage
@@ -411,6 +418,24 @@ export default function Home() {
         />
       )}
       {tab === "league" && <LeaguePage prices={prices} />}
+      {tab === "alerts" && <AlertsPage prices={prices} />}
+      {tab === "farm" && (
+        <FarmPage
+          prices={prices}
+          onOpenOptimizer={() => setTab("optimizer")}
+        />
+      )}
+      {tab === "season" && <SeasonPage prices={prices} />}
+      {tab === "optimizer" && (
+        <OptimizerPage
+          prices={prices}
+          onOpenFarm={() => setTab("farm")}
+          onOpenMarket={(name) => {
+            setSelected(name);
+            setTab("market");
+          }}
+        />
+      )}
       </section>
     </main>
   );

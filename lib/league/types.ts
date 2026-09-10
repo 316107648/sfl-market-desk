@@ -12,6 +12,7 @@ export type LeagueTrade = {
   unitPrice: number;
   total: number;
   createdAt: number;
+  realizedProfit?: number;
 };
 
 export type LeagueAccount = {
@@ -21,4 +22,12 @@ export type LeagueAccount = {
   xp: number;
   level: number;
   rankingPoints: number;
+  createdAt: number;
+};
+
+export type LeagueTier = {
+  name: "Bronze" | "Prata" | "Ouro" | "Platina" | "Diamante" | "Mestre";
+  icon: string;
+  minPoints: number;
+  nextPoints?: number;
 };
