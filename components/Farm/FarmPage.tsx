@@ -41,6 +41,7 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
   const [publicError, setPublicError] = useState("");
   const [cloudRestoreMessage, setCloudRestoreMessage] = useState("");
   const [selectedChickenId, setSelectedChickenId] = useState<string | null>(null);
+  const [selectedBarnAnimalId, setSelectedBarnAnimalId] = useState<string | null>(null);
 
   useEffect(() => {
     const localProfile = loadFarmProfile();
@@ -524,25 +525,22 @@ export default function FarmPage({ prices, onOpenOptimizer }: FarmPageProps) {
 
             {farmRoom === "animals" && (
               <div className="farm-room-stack">
-                <AnimalBuffOptimizer animals={liveSnapshot.animals} prices={prices} farmId={liveSnapshot.farmId} />
+                <details className="animal-profit-collapsed"><summary>📊 Análise econômica avançada</summary><AnimalBuffOptimizer animals={liveSnapshot.animals} prices={prices} farmId={liveSnapshot.farmId} /></details>
                 <ChickenCoop
                   animals={liveSnapshot.animals}
                   now={clock}
+                  farmId={liveSnapshot.farmId}
                   selectedId={selectedChickenId}
                   onSelect={setSelectedChickenId}
                 />
                 {liveSnapshot.animals.some((animal) => animal.kind !== "Chicken") ? (
-                  <FarmVisualSection title="🐾 Outros animais" empty="Nenhum outro animal foi retornado.">
-                    {liveSnapshot.animals.filter((animal) => animal.kind !== "Chicken").map((animal) => (
-                      <div className="farm-animal-wrap" key={`${animal.kind}-${animal.id}`}>
-                        <FarmTile icon="🐄" title={animal.name || `${animal.kind} #${animal.id}`} subtitle={animalStateLabel(animal.state)}
-                          readyAt={animal.readyAt} now={clock} forceReady={animal.state === "awake"}
-                          readyLabel={animal.state === "sick" ? "PRECISA DE ATENÇÃO" : "ACORDADO"}
-                          warning={animal.state === "sick" || animal.state === "needs_attention"} />
-                        <AnimalApiDiagnostic animal={animal} />
-                      </div>
-                    ))}
-                  </FarmVisualSection>
+                  <AnimalEnclosure
+                    animals={liveSnapshot.animals.filter((animal) => animal.kind !== "Chicken")}
+                    now={clock}
+                    farmId={liveSnapshot.farmId}
+                    selectedId={selectedBarnAnimalId}
+                    onSelect={setSelectedBarnAnimalId}
+                  />
                 ) : null}
               </div>
             )}
@@ -759,9 +757,10 @@ function FarmRoomButton({ active, icon, title, value, onClick }: { active: boole
 }
 
 
-function ChickenCoop({ animals, now, selectedId, onSelect }: {
+function ChickenCoop({ animals, now, farmId, selectedId, onSelect }: {
   animals: FarmLiveSnapshot["animals"];
   now: number;
+  farmId: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
@@ -812,13 +811,84 @@ function ChickenCoop({ animals, now, selectedId, onSelect }: {
             <div className="chicken-detail-title"><span>🐔</span><div><h3>{selected.name || `Chicken #${selected.id}`}</h3><p>Nível {selected.level ?? "não identificado"} · {animalStateLabel(selected.state)}</p></div></div>
             <ChickenFact icon="⏱️" label="Estado / próximo ciclo" value={selected.readyAt ? (selected.readyAt <= now ? "Disponível agora" : formatCountdown(selected.readyAt - now)) : animalStateLabel(selected.state)} />
             <ChickenDiagnosticSummary animal={selected} />
-            <div className="chicken-mimo-row"><span>🤗 Mimo</span><strong>{selected.affectionAt ? (selected.affectionAt <= now ? "DISPONÍVEL" : formatCountdown(selected.affectionAt - now)) : "API ainda não mapeada"}</strong></div>
-            <AnimalApiDiagnostic animal={selected} />
+            <AnimalLevelTracker animal={selected} farmId={farmId} />
+            <details className="animal-api-mini"><summary>Dados técnicos da API</summary><AnimalApiDiagnostic animal={selected} /></details>
           </aside>
         ) : null}
       </div>
     </section>
   );
+}
+
+
+type ManualAnimalProgress = {
+  target: string;
+  remaining: string;
+  mimo1: string;
+  mimo2: string;
+  mimo3: string;
+  lastMimo?: { label: string; value: number; at: number };
+};
+
+const ANIMAL_PROGRESS_LOCAL_KEY = "sfl-animal-manual-progress-v1";
+
+function useAnimalManualProgress(farmId: string) {
+  const [progress, setProgress] = useState<Record<string, ManualAnimalProgress>>({});
+  useEffect(() => {
+    let active = true;
+    try {
+      const raw = localStorage.getItem(`${ANIMAL_PROGRESS_LOCAL_KEY}:${farmId}`);
+      if (raw) setProgress(JSON.parse(raw));
+    } catch {}
+    if (farmId) {
+      void loadCloudState<Record<string, ManualAnimalProgress>>(farmId, "animal_manual_progress").then((cloud) => {
+        if (active && cloud.ok && cloud.data && typeof cloud.data === "object") setProgress(cloud.data);
+      });
+    }
+    return () => { active = false; };
+  }, [farmId]);
+  useEffect(() => {
+    if (!farmId || !Object.keys(progress).length) return;
+    try { localStorage.setItem(`${ANIMAL_PROGRESS_LOCAL_KEY}:${farmId}`, JSON.stringify(progress)); } catch {}
+    const timer = window.setTimeout(() => { void saveCloudState(farmId, "animal_manual_progress", progress); }, 500);
+    return () => window.clearTimeout(timer);
+  }, [farmId, progress]);
+  return [progress, setProgress] as const;
+}
+
+function defaultManualProgress(): ManualAnimalProgress {
+  return { target: "", remaining: "", mimo1: "", mimo2: "", mimo3: "" };
+}
+
+function AnimalLevelTracker({ animal, farmId }: { animal: FarmLiveSnapshot["animals"][number]; farmId: string }) {
+  const [all, setAll] = useAnimalManualProgress(farmId);
+  const key = `${animal.kind}:${animal.id}`;
+  const value = all[key] ?? defaultManualProgress();
+  const patch = (partial: Partial<ManualAnimalProgress>) => setAll((current) => ({ ...current, [key]: { ...(current[key] ?? defaultManualProgress()), ...partial } }));
+  const remainingNum = Math.max(0, Number(String(value.remaining).replace(",", ".")) || 0);
+  const targetNum = Math.max(0, Number(String(value.target).replace(",", ".")) || 0);
+  const applyMimo = (label: string, raw: string) => {
+    const amount = Math.max(0, Number(String(raw).replace(",", ".")) || 0);
+    if (!amount) return;
+    const base = value.remaining.trim() ? remainingNum : targetNum;
+    patch({ remaining: String(Math.max(0, base - amount)), lastMimo: { label, value: amount, at: Date.now() } });
+  };
+  return <div className="animal-level-tracker">
+    <div className="animal-level-total"><span>🎯 Próximo nível</span><strong>{value.remaining.trim() ? `${remainingNum.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} restantes` : targetNum ? `${targetNum.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} no total` : "Informe o total"}</strong></div>
+    <div className="animal-level-inputs"><label>Total necessário para o próximo nível<input value={value.target} onChange={(e) => patch({ target: e.target.value, remaining: e.target.value })} inputMode="decimal" placeholder="Ex.: 120" /></label></div>
+    <div className="animal-mimo-box"><div><span>🤗 Registrar mimo</span><small>Escolha o resultado que saiu no jogo. O site desconta do total restante e salva na nuvem.</small></div><div className="animal-mimo-values">{[1, 2, 3].map((index) => { const field = `mimo${index}` as "mimo1" | "mimo2" | "mimo3"; return <label key={field}>Mimo {index}<input value={value[field]} onChange={(e) => patch({ [field]: e.target.value } as Partial<ManualAnimalProgress>)} inputMode="decimal" placeholder="valor" /><button type="button" onClick={() => applyMimo(`Mimo ${index}`, value[field])}>Registrar</button></label>; })}</div>{value.lastMimo ? <small className="animal-last-mimo">Último: {value.lastMimo.label} (-{value.lastMimo.value})</small> : null}</div>
+  </div>;
+}
+
+function AnimalEnclosure({ animals, now, farmId, selectedId, onSelect }: { animals: FarmLiveSnapshot["animals"]; now: number; farmId: string; selectedId: string | null; onSelect: (id: string | null) => void; }) {
+  const selected = animals.find((animal) => animal.id === selectedId) ?? animals[0] ?? null;
+  useEffect(() => { if (!selectedId && animals[0]) onSelect(animals[0].id); }, [selectedId, animals.length]);
+  if (!animals.length) return null;
+  const sleeping = animals.filter((animal) => animal.state === "sleeping").length;
+  const attention = animals.filter((animal) => animal.state === "sick" || animal.state === "needs_attention").length;
+  const displayKind = (animal: FarmLiveSnapshot["animals"][number]) => animal.kind === "Barn" ? "Cow" : animal.kind;
+  const iconFor = (animal: FarmLiveSnapshot["animals"][number]) => displayKind(animal).toLowerCase().includes("sheep") ? "🐑" : "🐄";
+  return <section className="chicken-coop-shell barn-enclosure-shell"><div className="chicken-coop-topbar"><div><span className="chicken-coop-mark">🐄</span><div><p className="eyebrow">CURRAL</p><h3>{animals.length} animais detectados</h3></div></div><div className="chicken-coop-kpis"><span>😴 {sleeping} dormindo</span><span>❤️ {attention} atenção</span></div></div><div className="chicken-coop-layout"><div className="chicken-coop-board barn-board"><div className="coop-prop coop-hay">▦</div><div className="coop-prop coop-bucket">◉</div><div className="coop-chicken-grid barn-animal-grid">{animals.map((animal) => <button key={`${animal.kind}-${animal.id}`} className={`coop-chicken barn-animal ${selected?.id === animal.id ? "selected" : ""} ${animal.state}`} onClick={() => onSelect(animal.id)}><span className="coop-status-icon">{animal.state === "sleeping" ? "Zz" : animal.state === "sick" ? "!" : animal.state === "needs_attention" ? "♥" : ""}</span><span className="coop-chicken-icon">{iconFor(animal)}</span><span className="coop-chicken-bottom"><b>{animal.level ?? "?"}</b><i><em style={{ width: animal.level ? `${Math.max(12, Math.min(100, animal.level / 15 * 100))}%` : "35%" }} /></i></span></button>)}</div><div className="coop-legend"><span>🐄 ativo</span><span>💤 dormindo</span><span>❤️ precisa de atenção</span></div></div>{selected ? <aside className="chicken-detail-panel"><div className="chicken-detail-title"><span>{iconFor(selected)}</span><div><h3>{selected.name || `${displayKind(selected)} #${selected.id}`}</h3><p>Nível {selected.level ?? "não identificado"} · {animalStateLabel(selected.state)}</p></div></div><ChickenFact icon="⏱️" label="Estado / próximo ciclo" value={selected.readyAt ? (selected.readyAt <= now ? "Disponível agora" : formatCountdown(selected.readyAt - now)) : animalStateLabel(selected.state)} /><ChickenDiagnosticSummary animal={selected} /><AnimalLevelTracker animal={selected} farmId={farmId} /><details className="animal-api-mini"><summary>Dados técnicos da API</summary><AnimalApiDiagnostic animal={selected} /></details></aside> : null}</div></section>;
 }
 
 function ChickenFact({ icon, label, value }: { icon: string; label: string; value: string }) {
