@@ -917,6 +917,27 @@ type AnimalUiFacts = {
   productions: AnimalProductionFact[];
 };
 
+function deriveAnimalProgress(kind: string, xp?: number) {
+  if (xp === undefined || !Number.isFinite(xp)) return {};
+
+  // The Farm API exposes cumulative experience but not the display level.
+  // For cows we derive the current level from the XP of THIS animal, never
+  // from the selected/first animal. The Lv12 -> Lv13 boundary (6480 XP) was
+  // confirmed against the in-game panel. Nearby boundaries are kept local
+  // so they can be refined without coupling animals to one another.
+  if (/cow/i.test(kind)) {
+    const thresholds = [
+      { level: 11, start: 4500, next: 5400 },
+      { level: 12, start: 5400, next: 6480 },
+      { level: 13, start: 6480, next: 7740 },
+    ];
+    const row = [...thresholds].reverse().find((item) => xp >= item.start);
+    if (row) return { level: row.level, nextLevelRemaining: Math.max(0, row.next - xp) };
+  }
+
+  return {};
+}
+
 function animalUiFacts(animal: FarmLiveSnapshot["animals"][number]): AnimalUiFacts {
   const fields = animal.apiDiagnosticFields ?? [];
   const valueOf = (pattern: RegExp, reject?: RegExp) => fields.find((entry) => pattern.test(entry.path) && !(reject?.test(entry.path)));
@@ -950,10 +971,12 @@ function animalUiFacts(animal: FarmLiveSnapshot["animals"][number]): AnimalUiFac
   const requestXpEntry = valueOf(/request.*(xp|experience)|(xp|experience).*request/i);
   const requestReadyEntry = valueOf(/request.*(ready|at|time|next)|next.*request/i);
 
+  const xp = numberValue(xpEntry);
+  const derived = deriveAnimalProgress(animal.kind, xp);
   return {
-    level: animal.level ?? numberValue(levelEntry),
-    xp: numberValue(xpEntry),
-    nextLevelRemaining: numberValue(nextEntry),
+    level: animal.level ?? numberValue(levelEntry) ?? derived.level,
+    xp,
+    nextLevelRemaining: numberValue(nextEntry) ?? derived.nextLevelRemaining,
     favouriteFood: favoriteEntry?.value,
     feedQuantity: numberValue(feedQtyEntry),
     buffName: buffNameEntry?.value,
