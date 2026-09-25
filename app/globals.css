@@ -1007,3 +1007,12 @@ input:focus, select:focus { border-color: var(--accent); }
 .animal-profit-alert label{display:grid;grid-template-columns:minmax(0,1fr) 95px;align-items:center;gap:8px;color:#8fa0b3;font-size:8px}.animal-profit-alert input{width:100%;box-sizing:border-box;padding:6px 7px;border:1px solid rgba(148,163,184,.16);border-radius:7px;background:#0b121a;color:#fff;font-size:9px}
 .animal-profit-break{padding-top:6px;border-top:1px solid rgba(148,163,184,.1);color:#9aaaba;font-size:8px}.animal-profit-break b{color:#e5edf6}
 @media(max-width:700px){.animal-profit-alert label{grid-template-columns:1fr}}
+
+/* v30.1 - diagnostico de API visivel dentro do painel do animal */
+.animal-api-diagnostic-embedded{margin-top:6px;border:0;background:transparent;overflow:visible}
+.animal-api-diagnostic-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px;border:1px solid rgba(79,140,255,.15);border-radius:8px;background:rgba(79,140,255,.035)}
+.animal-api-diagnostic-heading>div{display:grid;gap:2px}.animal-api-diagnostic-heading strong{font-size:9px;color:#dbeafe}.animal-api-diagnostic-heading small{font-size:7px;color:var(--muted)}
+.animal-api-diagnostic-heading button{border:1px solid rgba(79,140,255,.28);border-radius:7px;background:#111d2b;color:#aecdff;padding:6px 8px;font-size:8px;font-weight:800;cursor:pointer;white-space:nowrap}
+.animal-api-diagnostic-heading button:hover{background:#17263a}
+.animal-api-mini[open]>summary{margin-bottom:4px;color:#9fc3ff}.animal-api-mini>.animal-api-diagnostic-embedded{display:block}
+.animal-api-raw[open]>summary{color:#9fc3ff}.animal-api-raw pre{max-height:420px}

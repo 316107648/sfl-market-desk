@@ -1025,6 +1025,7 @@ function AnimalProfitAlert({ animal, farmId, prices }: { animal: FarmLiveSnapsho
 
 function AnimalApiDiagnostic({ animal }: { animal: FarmLiveSnapshot["animals"][number] }) {
   const fields = animal.apiDiagnosticFields ?? [];
+  const [copied, setCopied] = useState(false);
 
   const find = (pattern: RegExp) => fields.find((entry) => pattern.test(entry.path));
   const findMany = (pattern: RegExp, limit = 4) => fields.filter((entry) => pattern.test(entry.path)).slice(0, limit);
@@ -1035,22 +1036,33 @@ function AnimalApiDiagnostic({ animal }: { animal: FarmLiveSnapshot["animals"][n
     { label: "Sono / acorda", entry: find(/sleep|wake|awakeAt|wakesAt/i) },
     { label: "Comida favorita", entry: find(/favorite.*food|favourite.*food|preferred.*food/i) },
     { label: "Alimentação", entry: find(/food|feed|fed|grain|hungry/i) },
-    { label: "Produção", entry: find(/egg|feather|wool|milk|yield|produce|reward/i) },
-    { label: "Buff / boost", entry: find(/buff|boost/i) },
-    { label: "Próxima ação", entry: find(/request|next.*ready|affection|love|pet/i) },
+    { label: "Produção", entry: find(/egg|feather|wool|milk|leather|yield|produce|reward/i) },
+    { label: "Buff / boost", entry: find(/buff|boost|treat/i) },
+    { label: "Próxima ação", entry: find(/request|next.*ready|affection|love|pet|brush/i) },
   ].filter((fact) => fact.entry);
 
-  const production = findMany(/egg|feather|wool|milk|yield|produce|reward/i, 8);
-  const feeding = findMany(/food|feed|fed|grain|hungry/i, 8);
-  const buffs = findMany(/buff|boost/i, 8);
+  const production = findMany(/egg|feather|wool|milk|leather|yield|produce|reward/i, 10);
+  const feeding = findMany(/food|feed|fed|grain|hungry/i, 10);
+  const buffs = findMany(/buff|boost|treat|harvests.*remaining/i, 10);
+  const rawJson = JSON.stringify(animal.rawData ?? {}, null, 2);
+
+  async function copyRawJson() {
+    try {
+      await navigator.clipboard.writeText(rawJson);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   return (
-    <details className="animal-api-diagnostic">
-      <summary>🔎 Diagnóstico da API</summary>
+    <div className="animal-api-diagnostic animal-api-diagnostic-embedded">
       <div className="animal-api-diagnostic-body">
-        <p>
-          Estes são os campos que a Community Farm API realmente enviou para este animal. Ainda não atribuímos significado a campos duvidosos: primeiro verificamos o dado bruto.
-        </p>
+        <div className="animal-api-diagnostic-heading">
+          <div><strong>🔎 Campos identificados</strong><small>Dados recebidos para este animal.</small></div>
+          <button type="button" onClick={copyRawJson}>{copied ? "✓ Copiado" : "📋 Copiar JSON"}</button>
+        </div>
 
         {facts.length > 0 ? (
           <div className="animal-api-facts">
@@ -1074,12 +1086,12 @@ function AnimalApiDiagnostic({ animal }: { animal: FarmLiveSnapshot["animals"][n
           </div>
         ) : null}
 
-        <details className="animal-api-raw">
-          <summary>Ver JSON bruto deste animal</summary>
-          <pre>{JSON.stringify(animal.rawData ?? {}, null, 2)}</pre>
+        <details className="animal-api-raw" open>
+          <summary>📋 JSON bruto deste animal</summary>
+          <pre>{rawJson}</pre>
         </details>
       </div>
-    </details>
+    </div>
   );
 }
 
