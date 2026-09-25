@@ -993,12 +993,22 @@ function animalUiFacts(animal: FarmLiveSnapshot["animals"][number]): AnimalUiFac
   const requestXpEntry = valueOf(/request.*(xp|experience)|(xp|experience).*request/i);
   const requestReadyEntry = valueOf(/request.*(ready|at|time|next)|next.*request/i);
 
-  const xp = numberValue(xpEntry);
-  const derived = deriveAnimalProgress(animal.kind, xp);
+  // Prefer the animal's own cumulative experience for cows. The API may expose
+  // a stale/legacy `level` field, which was overriding the corrected XP table
+  // and making the UI look unchanged after deploys.
+  const raw = (animal.rawData && typeof animal.rawData === "object") ? (animal.rawData as Record<string, unknown>) : {};
+  const rawXp = Number(String(raw.experience ?? raw.xp ?? "").replace(",", "."));
+  const xpFromFields = numberValue(xpEntry);
+  const xp = Number.isFinite(rawXp) ? rawXp : xpFromFields;
+  const rawKind = String(raw.type ?? raw.animalType ?? raw.species ?? raw.kind ?? "");
+  const isCow = /cow/i.test(animal.kind) || /cow/i.test(rawKind) || animal.kind === "Barn";
+  const derived = deriveAnimalProgress(isCow ? "Cow" : animal.kind, xp);
   return {
-    level: animal.level ?? numberValue(levelEntry) ?? derived.level,
+    // For cows, cumulative XP is authoritative for display progress.
+    // For other animals we keep the API-provided level behaviour.
+    level: isCow && derived.level !== undefined ? derived.level : (animal.level ?? numberValue(levelEntry) ?? derived.level),
     xp,
-    nextLevelRemaining: numberValue(nextEntry) ?? derived.nextLevelRemaining,
+    nextLevelRemaining: isCow && derived.nextLevelRemaining !== undefined ? derived.nextLevelRemaining : (numberValue(nextEntry) ?? derived.nextLevelRemaining),
     favouriteFood: favoriteEntry?.value,
     feedQuantity: numberValue(feedQtyEntry),
     buffName: buffNameEntry?.value,
