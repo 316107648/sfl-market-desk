@@ -917,29 +917,37 @@ type AnimalUiFacts = {
   productions: AnimalProductionFact[];
 };
 
-function deriveAnimalProgress(kind: string, xp?: number) {
-  if (xp === undefined || !Number.isFinite(xp)) return {};
+const COW_XP_LEVELS: Array<{ level: number; xp: number }> = [
+  { level: 1, xp: 0 },
+  { level: 2, xp: 360 },
+  { level: 3, xp: 720 },
+  { level: 4, xp: 1080 },
+  { level: 5, xp: 1440 },
+  { level: 6, xp: 1980 },
+  { level: 7, xp: 2520 },
+  { level: 8, xp: 3060 },
+  { level: 9, xp: 3600 },
+  { level: 10, xp: 4320 },
+  { level: 11, xp: 5040 },
+  { level: 12, xp: 5760 },
+  { level: 13, xp: 6480 },
+  { level: 14, xp: 7200 },
+  { level: 15, xp: 8100 },
+];
 
-  // The Farm API exposes cumulative experience but not the display level.
-  // For cows we derive the current level from the XP of THIS animal, never
-  // from the selected/first animal. The Lv12 -> Lv13 boundary (6480 XP) was
-  // confirmed against the in-game panel. Nearby boundaries are kept local
-  // so they can be refined without coupling animals to one another.
-  if (/cow/i.test(kind)) {
-    const thresholds = [
-      { level: 11, start: 4500, next: 5400 },
-      { level: 12, start: 5400, next: 6480 },
-      { level: 13, start: 6480, next: 7740 },
-    ];
-    const row = [...thresholds].reverse().find((item) => xp >= item.start);
-    if (row) return { level: row.level, nextLevelRemaining: Math.max(0, row.next - xp) };
+function cowProgressFromXp(xp: number) {
+  let current = COW_XP_LEVELS[0];
+  for (const entry of COW_XP_LEVELS) {
+    if (xp >= entry.xp) current = entry;
+    else break;
   }
-
-  return {};
+  const next = COW_XP_LEVELS.find((entry) => entry.level === current.level + 1);
+  return { level: current.level, nextLevelRemaining: next ? Math.max(0, next.xp - xp) : 0 };
 }
 
 function animalUiFacts(animal: FarmLiveSnapshot["animals"][number]): AnimalUiFacts {
   const fields = animal.apiDiagnosticFields ?? [];
+  const raw = (animal.rawData && typeof animal.rawData === "object" ? animal.rawData : {}) as Record<string, unknown>;
   const valueOf = (pattern: RegExp, reject?: RegExp) => fields.find((entry) => pattern.test(entry.path) && !(reject?.test(entry.path)));
   const numberValue = (entry?: { value: string }) => {
     if (!entry) return undefined;
@@ -971,17 +979,21 @@ function animalUiFacts(animal: FarmLiveSnapshot["animals"][number]): AnimalUiFac
   const requestXpEntry = valueOf(/request.*(xp|experience)|(xp|experience).*request/i);
   const requestReadyEntry = valueOf(/request.*(ready|at|time|next)|next.*request/i);
 
-  const xp = numberValue(xpEntry);
-  const derived = deriveAnimalProgress(animal.kind, xp);
+  const rawXp = typeof raw.experience === "number" ? raw.experience : typeof raw.xp === "number" ? raw.xp : undefined;
+  const resolvedXp = rawXp ?? numberValue(xpEntry);
+  const rawType = String(raw.type ?? animal.kind ?? "");
+  const cowProgress = resolvedXp !== undefined && /cow/i.test(rawType) ? cowProgressFromXp(resolvedXp) : undefined;
+  const rawFeedBuff = raw.feedBuff && typeof raw.feedBuff === "object" ? raw.feedBuff as Record<string, unknown> : undefined;
+
   return {
-    level: animal.level ?? numberValue(levelEntry) ?? derived.level,
-    xp,
-    nextLevelRemaining: numberValue(nextEntry) ?? derived.nextLevelRemaining,
+    level: cowProgress?.level ?? animal.level ?? numberValue(levelEntry),
+    xp: resolvedXp,
+    nextLevelRemaining: cowProgress?.nextLevelRemaining ?? numberValue(nextEntry),
     favouriteFood: favoriteEntry?.value,
     feedQuantity: numberValue(feedQtyEntry),
-    buffName: buffNameEntry?.value,
-    buffHarvestsRemaining: numberValue(buffRemainingEntry),
-    requestName: requestNameEntry?.value,
+    buffName: typeof rawFeedBuff?.name === "string" ? rawFeedBuff.name : buffNameEntry?.value,
+    buffHarvestsRemaining: typeof rawFeedBuff?.harvestsRemaining === "number" ? rawFeedBuff.harvestsRemaining : numberValue(buffRemainingEntry),
+    requestName: typeof raw.item === "string" ? raw.item : requestNameEntry?.value,
     requestXp: numberValue(requestXpEntry),
     requestReadyAt: numberValue(requestReadyEntry),
     productions: [...productionMap.values()],

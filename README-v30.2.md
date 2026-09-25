@@ -1,9 +1,6 @@
-# Sunflower Market Pro v30.2
+# v30.2 — progresso individual de vacas
 
-Correção do progresso individual dos animais.
-
-- Cada vaca agora calcula nível e XP restante usando o `experience` do próprio animal.
-- Corrige o caso em que a primeira vaca aparecia certa e as seguintes reutilizavam/interpretavam progresso incorretamente.
-- Mantém `Honey Treat` como buff (`feedBuff`) e `Brush` como item/request, sem misturar com alimentação.
-- A fronteira Cow Lv12 -> Lv13 em 6480 XP foi calibrada com um caso confirmado no jogo (5915 XP, faltando 565).
-- O diagnóstico bruto continua disponível para refinarmos as demais faixas caso o jogo use limites diferentes.
+- Corrige nível e XP restante por animal usando o `experience` do JSON de cada vaca.
+- Usa diretamente `item` como próximo pedido e `feedBuff.name/harvestsRemaining` como buff ativo.
+- A vaca com 5915 XP resulta em Lv 12 e 565 XP até Lv 13.
+- A vaca com 5087.5 XP resulta em Lv 11 e 672.5 XP até Lv 12.
