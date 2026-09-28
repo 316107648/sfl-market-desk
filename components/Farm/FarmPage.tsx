@@ -918,21 +918,25 @@ type AnimalUiFacts = {
 };
 
 const COW_XP_LEVELS = [
-  { level: 1, start: 120 },
-  { level: 2, start: 240 },
-  { level: 3, start: 480 },
-  { level: 4, start: 720 },
-  { level: 5, start: 960 },
-  { level: 6, start: 1320 },
-  { level: 7, start: 1680 },
-  { level: 8, start: 2040 },
-  { level: 9, start: 2400 },
-  { level: 10, start: 2880 },
-  { level: 11, start: 3360 },
-  { level: 12, start: 3840 },
-  { level: 13, start: 4320 },
-  { level: 14, start: 4800 },
-  { level: 15, start: 5400 },
+  // Current in-game cumulative XP thresholds for cows.
+  // Example checks: 5225 XP => Lv 11 (535 to Lv 12),
+  // 5915 XP => Lv 12 (565 to Lv 13).
+  { level: 0, start: 0 },
+  { level: 1, start: 180 },
+  { level: 2, start: 360 },
+  { level: 3, start: 720 },
+  { level: 4, start: 1080 },
+  { level: 5, start: 1440 },
+  { level: 6, start: 1980 },
+  { level: 7, start: 2520 },
+  { level: 8, start: 3060 },
+  { level: 9, start: 3600 },
+  { level: 10, start: 4320 },
+  { level: 11, start: 5040 },
+  { level: 12, start: 5760 },
+  { level: 13, start: 6480 },
+  { level: 14, start: 7200 },
+  { level: 15, start: 8160 },
 ] as const;
 
 function deriveAnimalProgress(kind: string, xp?: number) {
@@ -953,8 +957,9 @@ function deriveAnimalProgress(kind: string, xp?: number) {
       };
     }
 
-    // A cow below the first listed XP boundary is still a level-1 cow.
-    return { level: 1, nextLevelRemaining: Math.max(0, COW_XP_LEVELS[1].start - xp) };
+    // Defensive fallback. With level 0 starting at 0 this should only be hit
+    // for unexpected negative XP values.
+    return { level: 0, nextLevelRemaining: Math.max(0, COW_XP_LEVELS[1].start - xp) };
   }
 
   return {};
