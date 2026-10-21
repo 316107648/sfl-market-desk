@@ -942,10 +942,29 @@ const COW_XP_LEVELS = [
 function deriveAnimalProgress(kind: string, xp?: number) {
   if (xp === undefined || !Number.isFinite(xp)) return {};
 
-  // The Farm API currently exposes cumulative animal experience without a
-  // reliable display-level field for every cow. Derive the level from THIS
-  // animal's own XP using the published cow progression table.
+  // Cow XP is cumulative until level 15. At max level the game keeps the cow
+  // at the Lv. 15 base (8160 XP) and repeats 960-XP harvest cycles. Any XP
+  // above a completed cycle carries over to the next cycle.
   if (/cow/i.test(kind)) {
+    const maxLevel = COW_XP_LEVELS[COW_XP_LEVELS.length - 1];
+
+    if (xp >= maxLevel.start) {
+      const COW_MAX_LEVEL_CYCLE_XP = 960;
+      const xpAfterMax = Math.max(0, xp - maxLevel.start);
+      const cycleProgress = xpAfterMax % COW_MAX_LEVEL_CYCLE_XP;
+      const nextLevelRemaining = cycleProgress === 0 && xpAfterMax > 0
+        ? COW_MAX_LEVEL_CYCLE_XP
+        : COW_MAX_LEVEL_CYCLE_XP - cycleProgress;
+
+      return {
+        level: maxLevel.level,
+        nextLevelRemaining,
+        cycleProgress,
+        cycleXp: COW_MAX_LEVEL_CYCLE_XP,
+        maxLevel: true,
+      };
+    }
+
     const index = [...COW_XP_LEVELS].reverse().findIndex((item) => xp >= item.start);
 
     if (index >= 0) {
@@ -954,12 +973,15 @@ function deriveAnimalProgress(kind: string, xp?: number) {
       return {
         level: row.level,
         nextLevelRemaining: next ? Math.max(0, next.start - xp) : 0,
+        maxLevel: false,
       };
     }
 
-    // Defensive fallback. With level 0 starting at 0 this should only be hit
-    // for unexpected negative XP values.
-    return { level: 0, nextLevelRemaining: Math.max(0, COW_XP_LEVELS[1].start - xp) };
+    return {
+      level: 0,
+      nextLevelRemaining: Math.max(0, COW_XP_LEVELS[1].start - xp),
+      maxLevel: false,
+    };
   }
 
   return {};
