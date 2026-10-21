@@ -53,6 +53,18 @@ export async function ensureCloudSchema() {
     CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions (token_hash);
     CREATE INDEX IF NOT EXISTS idx_user_sessions_expiry ON user_sessions (expires_at);
 
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens (token_hash);
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expiry ON password_reset_tokens (expires_at);
+
     CREATE TABLE IF NOT EXISTS app_state (
       profile_id TEXT NOT NULL,
       namespace TEXT NOT NULL,
