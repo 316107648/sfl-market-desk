@@ -8,7 +8,7 @@ type Props = { children: ReactNode };
 
 export default function AuthGate({ children }: Props) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
-  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset" | "admin-reset">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +16,7 @@ export default function AuthGate({ children }: Props) {
   const [busy, setBusy] = useState(false);
   const [resetToken, setResetToken] = useState("");
   const [success, setSuccess] = useState("");
+  const [adminKey, setAdminKey] = useState("");
 
   async function loadMe() {
     try {
@@ -79,6 +80,28 @@ export default function AuthGate({ children }: Props) {
     }
   }
 
+  async function adminResetPassword() {
+    setError("");
+    setSuccess("");
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth/admin-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ adminKey, email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "Não foi possível redefinir a senha.");
+      setSuccess("Senha redefinida. Volte para o login e entre com a nova senha.");
+      setPassword("");
+      setAdminKey("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível redefinir a senha.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit() {
     setError("");
     setBusy(true);
@@ -114,17 +137,18 @@ export default function AuthGate({ children }: Props) {
         <section className="auth-card">
           <div className="auth-brand">🌻</div>
           <p className="auth-kicker">SUNFLOWER MARKET PRO</p>
-          <h1>{mode === "login" ? "Entrar na sua conta" : mode === "register" ? "Criar conta" : mode === "forgot" ? "Recuperar senha" : "Criar nova senha"}</h1>
+          <h1>{mode === "login" ? "Entrar na sua conta" : mode === "register" ? "Criar conta" : mode === "forgot" ? "Recuperar senha" : mode === "admin-reset" ? "Recuperação administrativa" : "Criar nova senha"}</h1>
           <p className="auth-copy">Seus dados da Land, temporada e análises ficam vinculados à sua conta na nuvem.</p>
 
           {mode === "register" && (
             <label>Nome<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
           )}
           {mode !== "reset" && <label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>}
-          {(mode === "login" || mode === "register" || mode === "reset") && (
+          {mode === "admin-reset" && <label>Chave administrativa<input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} autoComplete="off" /></label>}
+          {(mode === "login" || mode === "register" || mode === "reset" || mode === "admin-reset") && (
             <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} onKeyDown={(e) => { if (e.key === "Enter") { if (mode === "reset") void resetPassword(); else void submit(); } }} /></label>
           )}
-          {(mode === "register" || mode === "reset") && <small className="auth-hint">Use pelo menos 8 caracteres.</small>}
+          {(mode === "register" || mode === "reset" || mode === "admin-reset") && <small className="auth-hint">Use pelo menos 8 caracteres.</small>}
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="farm-message">{success}</div>}
           {mode === "forgot" ? (
@@ -135,6 +159,7 @@ export default function AuthGate({ children }: Props) {
             <button className="auth-primary" disabled={busy} onClick={() => void submit()}>{busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}</button>
           )}
           {mode === "login" && <button className="auth-switch" onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }}>Esqueci minha senha</button>}
+          {mode === "forgot" && <button className="auth-switch" onClick={() => { setMode("admin-reset"); setError(""); setSuccess(""); }}>Sou administrador</button>}
           <button className="auth-switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setSuccess(""); }}>
             {mode === "login" ? "Ainda não tenho conta" : "Voltar para entrar"}
           </button>
