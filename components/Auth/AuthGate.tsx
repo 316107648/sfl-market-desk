@@ -146,7 +146,7 @@ export default function AuthGate({ children }: Props) {
           {mode !== "reset" && <label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>}
           {mode === "admin-reset" && <label>Chave administrativa<input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} autoComplete="off" /></label>}
           {(mode === "login" || mode === "register" || mode === "reset" || mode === "admin-reset") && (
-            <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} onKeyDown={(e) => { if (e.key === "Enter") { if (mode === "reset") void resetPassword(); else void submit(); } }} /></label>
+            <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} onKeyDown={(e) => { if (e.key === "Enter") { if (mode === "reset") void resetPassword(); else if (mode === "admin-reset") void adminResetPassword(); else void submit(); } }} /></label>
           )}
           {(mode === "register" || mode === "reset" || mode === "admin-reset") && <small className="auth-hint">Use pelo menos 8 caracteres.</small>}
           {error && <div className="auth-error">{error}</div>}
@@ -155,6 +155,8 @@ export default function AuthGate({ children }: Props) {
             <button className="auth-primary" disabled={busy} onClick={() => void requestPasswordReset()}>{busy ? "Aguarde..." : "Enviar link de recuperação"}</button>
           ) : mode === "reset" ? (
             <button className="auth-primary" disabled={busy} onClick={() => void resetPassword()}>{busy ? "Aguarde..." : "Salvar nova senha"}</button>
+          ) : mode === "admin-reset" ? (
+            <button className="auth-primary" disabled={busy} onClick={() => void adminResetPassword()}>{busy ? "Aguarde..." : "Redefinir senha"}</button>
           ) : (
             <button className="auth-primary" disabled={busy} onClick={() => void submit()}>{busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}</button>
           )}
