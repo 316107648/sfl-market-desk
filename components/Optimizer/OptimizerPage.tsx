@@ -155,7 +155,10 @@ export default function OptimizerPage({
           <div className="optimizer-goal-result">
             <h3>⭐ Estratégia para evoluir o personagem</h3>
             {xpPlan.best ? (
-              <p>Melhor opção cadastrada: <strong>{xpPlan.best.crop.name}</strong> · {xpPlan.best.xpPerHour.toFixed(2)} XP/h.</p>
+              <>
+                <p><strong>Melhor opção prática:</strong> {xpPlan.best.crop.name} · {xpPlan.best.xpPerCycle.toFixed(2)} XP por colheita.</p>
+                <p className="caption">O ranking verifica todas as crops disponíveis, mas não multiplica a pontuação pela quantidade de replantios no dia. Assim, culturas muito rápidas não vencem apenas por exigirem dezenas ou centenas de ciclos. O tempo de crescimento entra somente como desempate.</p>
+              </>
             ) : (
               <p>O seletor de foco já está ativo, mas a base atual de crops ainda não possui XP verificado por item. O site não vai inventar esses números; quando a tabela de XP for adicionada, o ranking passa a funcionar automaticamente.</p>
             )}
