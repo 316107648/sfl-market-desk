@@ -18,6 +18,7 @@ export type XpCandidate = {
   crop: CropData;
   xpPerCycle: number;
   xpPerHour: number;
+  theoreticalCycles: number;
 };
 
 const RESOURCE_LABELS: Record<string, { market: string; icon: string }> = {
@@ -135,9 +136,21 @@ export function buildXpPlan(profile: FarmProfile) {
     .filter((crop) => crop.bumpkinLevel <= profile.bumpkinLevel && typeof crop.xp === "number" && crop.xp > 0)
     .map((crop) => {
       const hours = Math.max(crop.growTimeSeconds / 3600, 1 / 60);
-      return { crop, xpPerCycle: crop.xp!, xpPerHour: crop.xp! / hours };
+      const theoreticalCycles = Math.max(1, Math.floor(profile.activeHoursPerDay / hours));
+      return {
+        crop,
+        xpPerCycle: crop.xp!,
+        xpPerHour: crop.xp! / hours,
+        theoreticalCycles,
+      };
     })
-    .sort((a, b) => b.xpPerHour - a.xpPerHour);
+    // XP focus is intentionally ranked by XP per harvest, not by XP/hour.
+    // This prevents very short crops from winning only because they require
+    // dozens or hundreds of manual replants during the player's active window.
+    .sort((a, b) => {
+      if (b.xpPerCycle !== a.xpPerCycle) return b.xpPerCycle - a.xpPerCycle;
+      return a.crop.growTimeSeconds - b.crop.growTimeSeconds;
+    });
 
   return { candidates, best: candidates[0] };
 }
